@@ -12,7 +12,9 @@
         "object-literal-sort-keys": false,
         "interface-name": false,
         "no-submodule-imports": false,
-        "interface-over-type-literal": false
+        "interface-over-type-literal": false,
+        "max-classes-per-file": false,
+        "forin": false
     },
     "rulesDirectory": []
 }
