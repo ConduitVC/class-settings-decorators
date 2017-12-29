@@ -28,6 +28,11 @@ describe('class-settings-decorators', () => {
     }
   }
 
+  class FailParse {
+    @parse((value: object): string => 'foo')
+    public number: number;
+  }
+
   class Nested extends Settings {
     @env('_NESTED')
     public config: string;
@@ -80,7 +85,7 @@ describe('class-settings-decorators', () => {
 
     for (const [type, value] of typesValid) {
       it(`it should validate ${value} as ${type}`, () => {
-        expect(TestClass.$validateType(type, value)).toBe(true);
+        expect(TestClass.$validateType((type as any), value)).toBe(true);
       });
     }
 
@@ -89,7 +94,7 @@ describe('class-settings-decorators', () => {
         const subject = new TestClass({
           foo: 1,
         });
-        expect(TestClass.$validateType(type, value)).toBe(false);
+        expect(TestClass.$validateType((type as any), value)).toBe(false);
       });
     }
   });
