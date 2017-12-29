@@ -13,12 +13,18 @@ This module is intended to be used as a "configuration" tool. Today it can pull 
 import {
   env,
   parse,
+  nested,
   SettingFactory,
   Settings,
 } from 'class-setting-decorators'
 
 class OnConfig {
   // ...
+}
+
+class NestedConfig extends Settings {
+  @env('EMAIL')
+  email: string;
 }
 
 class TestClass extends Settings {
@@ -39,6 +45,11 @@ class TestClass extends Settings {
   @parse((value) => new OnConfig(value))
   @env('_TEST_ON_CONFIG')
   public config?: OnConfig;
+
+  // Allow for a nested object. Note unlike other decorators this cannot be used
+  // in conjunction with any other decorators.
+  @nested()
+  public communications: NestedConfig;
 }
 
 const factory = new SettingFactory();

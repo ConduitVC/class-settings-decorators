@@ -4,11 +4,17 @@ export interface HandlerType {
 }
 
 export interface EnvDecoratorConfig extends HandlerType {
+  type: 'env';
   env: string;
 }
 
 export interface ParseDecoratorConfig<T> extends HandlerType {
+  type: 'parse';
   fn(value: object): T;
+}
+
+export interface NestedDecoratorConfig extends HandlerType {
+  type: 'nested';
 }
 
 export type SuppliedDefaults = {
@@ -49,6 +55,17 @@ function defineKeyConfig(metaKey: any, config: any, target: any, propertyKey: st
   Reflect.defineMetadata(metaKey, config, target, propertyKey);
 }
 
+export function nested() {
+  return (target: any, propertyKey: string) => {
+    const metaKey = Symbol(`nested ${propertyKey}`);
+    const config: NestedDecoratorConfig = {
+      type: 'nested',
+      propertyKey,
+    };
+    defineKeyConfig(metaKey, config, target, 'property');
+  };
+}
+
 export function env(name) {
   const metaKey = Symbol(`env: ${name}`);
   return (target: any, propertyKey: string) => {
@@ -77,6 +94,7 @@ export function environmentHandler(
   value: object,
   designType: any,
   config: EnvDecoratorConfig,
+  factory: SettingFactory,
 ): string | undefined {
   const { env: name } = config;
   return process.env[name];
@@ -86,8 +104,26 @@ export function parseHandler<T>(
   value: object,
   designType: any,
   config: ParseDecoratorConfig<T>,
+  factory: SettingFactory,
 ): T {
   return config.fn(value);
+}
+
+export function nestedHandler(
+  value: object,
+  designType: any,
+  config: EnvDecoratorConfig,
+  factory: SettingFactory,
+): Settings {
+  // use prototype since this is a class object not an instance.
+  if (!(designType.prototype instanceof Settings)) {
+    throw new Error(`${config.propertyKey} is not a subclass of settings`);
+  }
+  const { result, errors } = factory.create((designType) as any);
+  if (errors) {
+    throw ValidationError.join(errors);
+  }
+  return result;
 }
 
 const ClassValues = Symbol(`class setting values`);
@@ -101,12 +137,14 @@ export type Handler = (
   value: object,
   designType: any,
   config: HandlerType,
+  factory: SettingFactory,
 ) => any;
 
 export class SettingFactory {
   public handlers: { [key: string]: Handler } = {
     env: environmentHandler,
     parse: parseHandler,
+    nested: nestedHandler,
   };
 
   public create<T extends Settings>(
@@ -125,7 +163,7 @@ export class SettingFactory {
         const err =  new Error(`unexpected handler type : ${meta.type}`);
         throw err;
       }
-      const value = handler(sum.values[propertyKey], designType, meta);
+      const value = handler(sum.values[propertyKey], designType, meta, this);
       if (value === undefined) {
         return sum;
       }
@@ -152,6 +190,15 @@ export class SettingFactory {
 }
 
 export class ValidationError extends Error {
+  public static join(errors: ValidationError[]): Error {
+    const fields = errors.map((value) => value.propertyKey);
+    const messages = errors.map((value) => value.message);
+
+    let message = `Error in ${fields.join(', ')} fields\n`;
+    message += messages.join('\n');
+    return new Error(message);
+  }
+
   public propertyKey: string;
   public type: any;
 

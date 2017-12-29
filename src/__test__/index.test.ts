@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import {
   env,
   parse,
+  nested,
   SettingFactory,
   Settings,
 } from '../';
@@ -26,6 +27,12 @@ describe('class-settings-decorators', () => {
       this.value = value;
     }
   }
+
+  class Nested extends Settings {
+    @env('_NESTED')
+    public config: string;
+  }
+
   // ts
   class TestClass extends Settings {
     @env('_TEST_FOO_PLUS')
@@ -36,6 +43,8 @@ describe('class-settings-decorators', () => {
     @parse((value) => new OnConfig(value))
     @env('_TEST_ON_CONFIG')
     public config?: OnConfig;
+    @nested()
+    public nested: Nested;
   }
 
   describe('.$validateType', () => {
@@ -154,5 +163,39 @@ describe('class-settings-decorators', () => {
       foo: 100,
       bar: 'sup',
     });
+  });
+
+  it('should allow nested settings objects', () => {
+    Object.assign(process.env, {
+      _TEST_FOO: 1,
+      _TEST_FOO_PLUS: 100,
+      _NESTED: 'supfoo',
+    });
+
+    const factory = new SettingFactory();
+    const { result, errors } = factory.create(TestClass);
+    expect(errors).toBe(null);
+    expect(result).toBeInstanceOf(TestClass);
+    expect(result).toMatchObject({
+      foo: 100,
+      bar: 'sup',
+      nested: {
+        config: 'supfoo',
+      },
+    });
+  });
+
+  it('should throw an error when invalid props are given in nested object', () => {
+    Object.assign(process.env, {
+      _TEST_FOO: 1,
+      _TEST_FOO_PLUS: 100,
+      _NESTED: 1,
+    });
+
+    const factory = new SettingFactory();
+
+    expect(() => {
+      factory.create(TestClass);
+    }).toThrowError(/config/);
   });
 });
