@@ -24,8 +24,7 @@
     "displayName": "jest",
     "projects": [
       ".",
-      "./tslint.jest.js",
-      "./tsc.jest.js"
+      "./tslint.jest.js"
     ],
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
