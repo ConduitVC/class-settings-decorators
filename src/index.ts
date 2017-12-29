@@ -19,8 +19,15 @@ export type AnySettings = {
   [key: string]: any;
 };
 
+export type ValidateResult = {
+  errors: ValidationError[] | null;
+  success: boolean;
+};
+
 export interface ClassObject<T extends Settings> {
   new(settings: AnySettings): T;
+  $validateType(type: any, value: any): boolean;
+  $validate(values: AnySettings, types: AnySettings): ValidateResult;
 }
 
 const metaMetaKey = 'class-setting-keys:list';
@@ -85,41 +92,118 @@ export function parseHandler<T>(
 
 const ClassValues = Symbol(`class setting values`);
 
+export type CreateResult<T> = {
+  errors: ValidationError[] | null;
+  result: T | null;
+};
+
 export class SettingFactory {
   public handlers = {
     env: environmentHandler,
     parse: parseHandler,
   };
 
-  public create<T>(klass: ClassObject<T>, defaults: SuppliedDefaults = {}): T {
+  public create<T extends Settings>(
+    klass: ClassObject<T>,
+    defaults: SuppliedDefaults = {},
+  ): CreateResult<T> {
     const keys = Reflect.getMetadata(metaMetaKey, klass.prototype);
-    const classMeta = keys.reduce((result, key) => {
+    const classMeta = keys.reduce((sum, key) => {
       const meta = Reflect.getMetadata(key, klass.prototype, 'property');
       const { propertyKey } = meta;
       const designType = Reflect.getMetadata('design:type', klass.prototype, propertyKey);
-      result.designTypes[propertyKey] = designType;
+      sum.designTypes[propertyKey] = designType;
 
       const handler = this.handlers[meta.type];
       if (!handler) {
         const err =  new Error(`unexpected handler type : ${meta.type}`);
         throw err;
       }
-      const value = handler(result.values[propertyKey], designType, meta);
+      const value = handler(sum.values[propertyKey], designType, meta);
       if (value === undefined) {
-        return result;
+        return sum;
       }
-      result.values[propertyKey] = value;
-      return result;
+      sum.values[propertyKey] = value;
+      return sum;
     }, {
       values: { ...defaults },
       designTypes: {},
     });
 
-    return new klass(classMeta.values);
+    const validate = klass.$validate(classMeta.values, classMeta.designTypes);
+    if (validate.success) {
+      return {
+        errors: null,
+        result: new klass(classMeta.values),
+      };
+    }
+
+    return {
+      errors: validate.errors,
+      result: null,
+    };
   }
 }
 
+export class ValidationError extends Error {
+  public propertyKey: string;
+  public type: any;
+
+  constructor(propertyKey: string, type: any, value: any) {
+    const msg = `${propertyKey} (${value}) failed to parse as type ${type}`;
+    super(msg);
+    this.propertyKey = propertyKey;
+    this.type = type;
+  }
+}
+
+const validators = new Map();
+validators.set(Boolean, (value) => typeof value === 'boolean');
+validators.set(Number, (value) => typeof value === 'number');
+validators.set(String, (value) => typeof value === 'string');
+validators.set(null, (value) => value === null);
+
 export class Settings {
+  public static readonly $validators: Map<any, (value: any) => boolean> = validators;
+
+  public static $validateType(expectedType: any, value: any): boolean {
+    const validator = this.$validators.get(expectedType);
+    if (validator) {
+      return validator(value);
+    }
+    return (value instanceof expectedType);
+  }
+
+  public static $validate(
+    values: AnySettings,
+    designTypes: AnySettings,
+  ): ValidateResult {
+    const errors = Object.keys(values).reduce((sum, key: string) => {
+      const value = values[key];
+      const type = designTypes[key];
+      if (!type) {
+        throw new Error(`Could not resolve type for ${key}`);
+      }
+      const validates = this.$validateType(type, value);
+      if (!validates) {
+        sum.push(new ValidationError(key, type, value));
+      }
+      return sum;
+    }, []);
+
+    if (!errors.length) {
+      return {
+        success: true,
+        errors: null,
+      };
+    }
+
+    return {
+      success: false,
+      errors,
+    };
+  }
+
   constructor(values: AnySettings = {}) {
     for (const key in values) {
       if (values[key] === undefined) {
