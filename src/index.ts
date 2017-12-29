@@ -97,8 +97,14 @@ export type CreateResult<T> = {
   result: T | null;
 };
 
+export type Handler = (
+  value: object,
+  designType: any,
+  config: HandlerType,
+) => any;
+
 export class SettingFactory {
-  public handlers = {
+  public handlers: { [key: string]: Handler } = {
     env: environmentHandler,
     parse: parseHandler,
   };
@@ -205,11 +211,6 @@ export class Settings {
   }
 
   constructor(values: AnySettings = {}) {
-    for (const key in values) {
-      if (values[key] === undefined) {
-        continue;
-      }
-      this[key] = values[key];
-    }
+    Object.assign(this, values);
   }
 }

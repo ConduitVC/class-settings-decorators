@@ -22,6 +22,7 @@
   },
   "jest": {
     "displayName": "jest",
+    "mapCoverage": true,
     "projects": [
       ".",
       "./tslint.jest.js"
@@ -31,10 +32,10 @@
     },
     "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
     "moduleFileExtensions": [
-      "ts",
-      "tsx",
       "js",
       "jsx",
+      "ts",
+      "tsx",
       "json"
     ]
   }

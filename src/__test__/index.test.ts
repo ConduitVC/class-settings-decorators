@@ -9,6 +9,17 @@ import {
 
 describe('class-settings-decorators', () => {
 
+  let originalProcessEnv;
+
+  beforeEach(() => {
+    originalProcessEnv = process.env;
+    process.env = { ...originalProcessEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalProcessEnv;
+  });
+
   class OnConfig {
     public value: any;
     constructor(value: any) {
@@ -17,6 +28,7 @@ describe('class-settings-decorators', () => {
   }
   // ts
   class TestClass extends Settings {
+    @env('_TEST_FOO_PLUS')
     @env('_TEST_FOO')
     public foo: number;
     @env('_TEST_BAR')
@@ -73,6 +85,17 @@ describe('class-settings-decorators', () => {
     }
   });
 
+  it('should throw when using invalid handler', () => {
+    class NewFactory extends SettingFactory {
+      public readonly handlers = {};
+    }
+
+    expect(() => {
+      const factory = new NewFactory();
+      const out = factory.create(TestClass);
+    }).toThrowError(/env/);
+  });
+
   it('should allow defaults when environment variable is missing', () => {
     Object.assign(process.env, {
       _TEST_FOO: 1,
@@ -115,5 +138,21 @@ describe('class-settings-decorators', () => {
     expect(errors).toHaveLength(1);
     const [error] = errors;
     expect(error.propertyKey).toBe('foo');
+  });
+
+  it('should have the top most decorator win', () => {
+    Object.assign(process.env, {
+      _TEST_FOO: 1,
+      _TEST_FOO_PLUS: 100,
+    });
+
+    const factory = new SettingFactory();
+    const { result, errors } = factory.create(TestClass);
+    expect(errors).toBe(null);
+    expect(result).toBeInstanceOf(TestClass);
+    expect(result).toMatchObject({
+      foo: 100,
+      bar: 'sup',
+    });
   });
 });
