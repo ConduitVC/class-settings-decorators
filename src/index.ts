@@ -39,7 +39,7 @@ export type ValidateResult = {
 
 export interface ClassObject<T extends Settings> {
   new(settings: AnySettings): T;
-  $validateType(type: object, value: object): boolean;
+  $validateType(type: DesignType, value: object): boolean;
   $validate(values: AnySettings, types: AnySettings): ValidateResult;
 }
 
