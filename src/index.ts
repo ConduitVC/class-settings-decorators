@@ -45,13 +45,13 @@ export interface ClassObject<T extends Settings> {
 
 const metaMetaKey = 'class-setting-keys:list';
 
-function getOrCreateKeyList(target: object, propertyKey) {
+function getOrCreateKeyList(target: object, propertyKey: string | symbol) {
   const result = Reflect.getMetadata(metaMetaKey, target);
   if (result) {
     return result;
   }
 
-  const list = [];
+  const list: Array<string | symbol> = [];
   Reflect.defineMetadata(metaMetaKey, list, target);
   return list;
 }
@@ -73,7 +73,7 @@ export function nested() {
   };
 }
 
-export function env(name) {
+export function env(name: string) {
   const metaKey = Symbol(`env: ${name}`);
   return (target: object, propertyKey: string) => {
     const config: EnvDecoratorConfig = {
@@ -99,7 +99,7 @@ export function parse<T>(fn: (value: object) => T) {
 
 export function environmentHandler(
   value: object,
-  designType: object,
+  designType: DesignType,
   config: EnvDecoratorConfig,
   factory: SettingFactory,
 ): string | undefined {
@@ -109,7 +109,7 @@ export function environmentHandler(
 
 export function parseHandler<T>(
   value: object,
-  designType: object,
+  designType: DesignType,
   config: ParseDecoratorConfig<T>,
   factory: SettingFactory,
 ): T {
@@ -118,15 +118,18 @@ export function parseHandler<T>(
 
 export function nestedHandler<T>(
   value: object,
-  designType: ClassObject<T>,
+  designType: DesignType,
   config: EnvDecoratorConfig,
   factory: SettingFactory,
 ): Settings {
+  if (!designType) {
+    throw new Error(`design type for ${config.propertyKey} is null or undefined`);
+  }
   // use prototype since this is a class object not an instance.
   if (!(designType.prototype instanceof Settings)) {
     throw new Error(`${config.propertyKey} is not a subclass of settings`);
   }
-  return factory.create(designType);
+  return factory.create((designType as ClassObject<Settings>));
 }
 
 const ClassValues = Symbol(`class setting values`);
@@ -138,13 +141,16 @@ export type CreateResult<T> = {
 
 export type Handler = (
   value: object,
-  designType: object,
-  config: HandlerType,
+  designType: DesignType,
+  config: EnvDecoratorConfig | ParseDecoratorConfig<any> | NestedDecoratorConfig,
   factory: SettingFactory,
 ) => any;
 
 export class SettingFactory {
-  public handlers: { [key: string]: Handler } = {
+  public handlers: {
+    // tslint:disable-next-line ban-types
+    [key: string]: Function,
+  } = {
     env: environmentHandler,
     parse: parseHandler,
     nested: nestedHandler,
@@ -158,21 +164,28 @@ export class SettingFactory {
     if (errors) {
       throw ValidationError.join(errors);
     }
-    return result;
+    return (result as T);
   }
 
   public query<T extends Settings>(
     klass: ClassObject<T>,
     defaults: SuppliedDefaults = {},
   ): CreateResult<T> {
-    const keys = Reflect.getMetadata(metaMetaKey, klass.prototype);
-    const classMeta = keys.reduce((sum, key) => {
+    const keys = Reflect.getMetadata(metaMetaKey, klass.prototype) || [];
+    const classMeta = keys.reduce((
+      sum: {
+        values: AnySettings,
+        designTypes: DesignTypes,
+      },
+      key: string | symbol,
+    ) => {
       const meta = Reflect.getMetadata(key, klass.prototype, 'property');
       const { propertyKey } = meta;
       const designType = Reflect.getMetadata('design:type', klass.prototype, propertyKey);
       sum.designTypes[propertyKey] = designType;
 
       const handler = this.handlers[meta.type];
+
       if (!handler) {
         const err =  new Error(`unexpected handler type : ${meta.type}`);
         throw err;
@@ -225,13 +238,13 @@ export class ValidationError extends Error {
 }
 
 const validators = new Map();
-validators.set(Boolean, (value) => typeof value === 'boolean');
-validators.set(Number, (value) => typeof value === 'number');
-validators.set(String, (value) => typeof value === 'string');
-validators.set(null, (value) => value === null);
+validators.set(Boolean, (value: object) => typeof value === 'boolean');
+validators.set(Number, (value: object) => typeof value === 'number');
+validators.set(String, (value: object) => typeof value === 'string');
+validators.set(null, (value: object) => value === null);
 
 export class Settings {
-  public static readonly $validators: Map<object, (value: object) => boolean> = validators;
+  public static readonly $validators: Map<DesignType, (value: object) => boolean> = validators;
 
   // tslint:disable-next-line ban-types
   public static $validateType(expectedType: DesignType, value: object): boolean {
@@ -239,14 +252,14 @@ export class Settings {
     if (validator) {
       return validator(value);
     }
-    return (value instanceof expectedType);
+    return (value instanceof (expectedType as any));
   }
 
   public static $validate(
     values: AnySettings,
     designTypes: DesignTypes,
   ): ValidateResult {
-    const errors = Object.keys(values).reduce((sum, key: string) => {
+    const errors = Object.keys(values).reduce((sum: ValidationError[], key: string) => {
       const value = values[key];
       const type = designTypes[key];
       if (!type) {

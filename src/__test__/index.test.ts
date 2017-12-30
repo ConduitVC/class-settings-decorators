@@ -10,7 +10,7 @@ import {
 
 describe('class-settings-decorators', () => {
 
-  let originalProcessEnv;
+  let originalProcessEnv: any;
 
   beforeEach(() => {
     originalProcessEnv = process.env;
@@ -85,7 +85,7 @@ describe('class-settings-decorators', () => {
 
     for (const [type, value] of typesValid) {
       it(`it should validate ${value} as ${type}`, () => {
-        expect(TestClass.$validateType((type as any), value)).toBe(true);
+        expect(TestClass.$validateType((type as any), (value as any))).toBe(true);
       });
     }
 
@@ -94,7 +94,7 @@ describe('class-settings-decorators', () => {
         const subject = new TestClass({
           foo: 1,
         });
-        expect(TestClass.$validateType((type as any), value)).toBe(false);
+        expect(TestClass.$validateType((type as any), (value as any))).toBe(false);
       });
     }
   });
@@ -136,8 +136,8 @@ describe('class-settings-decorators', () => {
     expect(result).toMatchObject({
       bar: 'sup',
     });
-    expect(result.config).toBeInstanceOf(OnConfig);
-    expect(result.config.value).toBe('foo');
+    expect(result && result.config).toBeInstanceOf(OnConfig);
+    expect(result && result.config && result.config.value).toBe('foo');
   });
 
   it('it should return errors', () => {
@@ -150,7 +150,7 @@ describe('class-settings-decorators', () => {
     const { result, errors } = factory.query(TestClass);
     expect(result).toBeFalsy();
     expect(errors).toHaveLength(1);
-    const [error] = errors;
+    const [error] = errors as any;
     expect(error.propertyKey).toBe('foo');
   });
 
@@ -202,5 +202,15 @@ describe('class-settings-decorators', () => {
     expect(() => {
       factory.query(TestClass);
     }).toThrowError(/config/);
+  });
+
+  it('should not throw on class with no decorators', () => {
+    class NoSettings extends Settings {
+      public foo = '100';
+    }
+
+    const factory = new SettingFactory();
+    const result = factory.create(NoSettings);
+    expect(result.foo).toBe('100');
   });
 });
