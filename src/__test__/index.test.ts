@@ -106,7 +106,7 @@ describe('class-settings-decorators', () => {
 
     expect(() => {
       const factory = new NewFactory();
-      const out = factory.create(TestClass);
+      const out = factory.query(TestClass);
     }).toThrowError(/env/);
   });
 
@@ -116,7 +116,7 @@ describe('class-settings-decorators', () => {
     });
 
     const factory = new SettingFactory();
-    const { result, errors } = factory.create(TestClass);
+    const { result, errors } = factory.query(TestClass);
     expect(errors).toBe(null);
     expect(result).toBeInstanceOf(TestClass);
     expect(result).toMatchObject({
@@ -131,7 +131,7 @@ describe('class-settings-decorators', () => {
     });
 
     const factory = new SettingFactory();
-    const { result } = factory.create(TestClass);
+    const { result } = factory.query(TestClass);
     expect(result).toBeInstanceOf(TestClass);
     expect(result).toMatchObject({
       bar: 'sup',
@@ -147,7 +147,7 @@ describe('class-settings-decorators', () => {
     });
 
     const factory = new SettingFactory();
-    const { result, errors } = factory.create(TestClass);
+    const { result, errors } = factory.query(TestClass);
     expect(result).toBeFalsy();
     expect(errors).toHaveLength(1);
     const [error] = errors;
@@ -161,7 +161,7 @@ describe('class-settings-decorators', () => {
     });
 
     const factory = new SettingFactory();
-    const { result, errors } = factory.create(TestClass);
+    const { result, errors } = factory.query(TestClass);
     expect(errors).toBe(null);
     expect(result).toBeInstanceOf(TestClass);
     expect(result).toMatchObject({
@@ -178,7 +178,7 @@ describe('class-settings-decorators', () => {
     });
 
     const factory = new SettingFactory();
-    const { result, errors } = factory.create(TestClass);
+    const { result, errors } = factory.query(TestClass);
     expect(errors).toBe(null);
     expect(result).toBeInstanceOf(TestClass);
     expect(result).toMatchObject({
@@ -200,7 +200,7 @@ describe('class-settings-decorators', () => {
     const factory = new SettingFactory();
 
     expect(() => {
-      factory.create(TestClass);
+      factory.query(TestClass);
     }).toThrowError(/config/);
   });
 });

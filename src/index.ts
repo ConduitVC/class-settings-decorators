@@ -126,11 +126,7 @@ export function nestedHandler<T>(
   if (!(designType.prototype instanceof Settings)) {
     throw new Error(`${config.propertyKey} is not a subclass of settings`);
   }
-  const { result, errors } = factory.create(designType);
-  if (errors) {
-    throw ValidationError.join(errors);
-  }
-  return result;
+  return factory.create(designType);
 }
 
 const ClassValues = Symbol(`class setting values`);
@@ -155,6 +151,17 @@ export class SettingFactory {
   };
 
   public create<T extends Settings>(
+    klass: ClassObject<T>,
+    defaults: SuppliedDefaults = {},
+  ): T {
+    const { errors, result } = this.query(klass, defaults);
+    if (errors) {
+      throw ValidationError.join(errors);
+    }
+    return result;
+  }
+
+  public query<T extends Settings>(
     klass: ClassObject<T>,
     defaults: SuppliedDefaults = {},
   ): CreateResult<T> {
