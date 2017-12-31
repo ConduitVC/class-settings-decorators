@@ -4,6 +4,7 @@ import {
   env,
   parse,
   nested,
+  overwrite,
   SettingFactory,
   Settings,
 } from '../';
@@ -26,11 +27,6 @@ describe('class-settings-decorators', () => {
     constructor(value: any) {
       this.value = value;
     }
-  }
-
-  class FailParse {
-    @parse((value: object): string => 'foo')
-    public number: number;
   }
 
   class Nested extends Settings {
@@ -91,9 +87,6 @@ describe('class-settings-decorators', () => {
 
     for (const [type, value] of typesInvalid) {
       it(`it should fail to validate ${value} as ${type}`, () => {
-        const subject = new TestClass({
-          foo: 1,
-        });
         expect(TestClass.$validateType((type as any), (value as any))).toBe(false);
       });
     }
@@ -106,7 +99,7 @@ describe('class-settings-decorators', () => {
 
     expect(() => {
       const factory = new NewFactory();
-      const out = factory.query(TestClass);
+      factory.query(TestClass);
     }).toThrowError(/env/);
   });
 
@@ -123,6 +116,7 @@ describe('class-settings-decorators', () => {
       foo: 1,
       bar: 'sup',
     });
+    expect(result && result.config).toBeInstanceOf(OnConfig);
   });
 
   it('it should allow parsing of values', () => {
@@ -212,5 +206,38 @@ describe('class-settings-decorators', () => {
     const factory = new SettingFactory();
     const result = factory.create(NoSettings);
     expect(result.foo).toBe('100');
+  });
+
+  it('should allow overriding settings in subclasses', () => {
+    Object.assign(process.env, {
+      _TEST_FOO_PLUS: 1,
+      _TEST_BAR: 'bar',
+    });
+
+    let calledOnBuild = false;
+    class Sub extends TestClass {
+      @overwrite()
+      public foo: number = 100;
+
+      public onBuild() {
+        calledOnBuild = true;
+        expect(this.foo).toBe(100);
+        expect(this.bar).toBe('bar');
+      }
+    }
+    const factory = new SettingFactory();
+    const sub = factory.create(Sub);
+    const parent = factory.create(TestClass);
+    expect(calledOnBuild).toBe(true);
+    expect(sub).toBeInstanceOf(Sub);
+    expect(sub).toMatchObject({
+      foo: 100,
+      bar: 'bar',
+    });
+
+    expect(parent).toMatchObject({
+      foo: 1,
+      bar: 'bar',
+    });
   });
 });

@@ -17,6 +17,16 @@ export interface NestedDecoratorConfig extends HandlerType {
   type: 'nested';
 }
 
+export interface OverwriteDecoratorConfig extends HandlerType {
+  type: 'overwrite';
+}
+
+export type DecoratorTypes =
+  EnvDecoratorConfig |
+  ParseDecoratorConfig<any> |
+  NestedDecoratorConfig |
+  OverwriteDecoratorConfig;
+
 export type SuppliedDefaults = {
   [key: string]: object;
 };
@@ -38,62 +48,85 @@ export type ValidateResult = {
 };
 
 export interface ClassObject<T extends Settings> {
-  new(settings: AnySettings): T;
+  new(): T;
   $validateType(type: DesignType, value: object): boolean;
   $validate(values: AnySettings, types: AnySettings): ValidateResult;
 }
 
-const metaMetaKey = 'class-setting-keys:list';
+const metaClassDecorators = Symbol('class setting decorator list');
+const metaDecorators = Symbol('setting decorators');
 
-function getOrCreateKeyList(target: object, propertyKey: string | symbol) {
-  const result = Reflect.getMetadata(metaMetaKey, target);
-  if (result) {
-    return result;
+function getOrCreateKeyList<T>(
+  key: symbol,
+  target: object,
+  defaultValue: T,
+  propertyKey?: string,
+): T {
+  if (propertyKey) {
+    const result = Reflect.getMetadata(key, target, propertyKey);
+    if (result) { return result; }
+  } else {
+    const result = Reflect.getMetadata(key, target);
+    if (result) { return result; }
   }
 
-  const list: Array<string | symbol> = [];
-  Reflect.defineMetadata(metaMetaKey, list, target);
-  return list;
+  if (propertyKey) {
+    Reflect.defineMetadata(key, defaultValue, target, propertyKey);
+  } else {
+    Reflect.defineMetadata(key, defaultValue, target);
+  }
+  return defaultValue;
 }
 
-function defineKeyConfig(metaKey: symbol, config: object, target: object, propertyKey: string) {
-  const list = getOrCreateKeyList(target, propertyKey);
-  list.push(metaKey);
-  Reflect.defineMetadata(metaKey, config, target, propertyKey);
+function defineKeyConfig(
+  config: DecoratorTypes,
+  target: object,
+  propertyKey: string,
+) {
+  const defaultPropList: DecoratorTypes[] = [];
+  const classList = getOrCreateKeyList(metaClassDecorators, target, new Set());
+  const propertyList = getOrCreateKeyList(metaDecorators, target, defaultPropList, propertyKey);
+
+  classList.add(propertyKey);
+  propertyList.push(config);
 }
 
 export function nested() {
   return (target: object, propertyKey: string) => {
-    const metaKey = Symbol(`nested ${propertyKey}`);
     const config: NestedDecoratorConfig = {
       type: 'nested',
       propertyKey,
     };
-    defineKeyConfig(metaKey, config, target, 'property');
+    defineKeyConfig(config, target, propertyKey);
   };
 }
 
 export function env(name: string) {
-  const metaKey = Symbol(`env: ${name}`);
   return (target: object, propertyKey: string) => {
     const config: EnvDecoratorConfig = {
       type: 'env',
       propertyKey,
       env: name,
     };
-    defineKeyConfig(metaKey, config, target, 'property');
+    defineKeyConfig(config, target, propertyKey);
   };
 }
 
 export function parse<T>(fn: (value: object) => T) {
-  const metaKey = Symbol(`parse`);
   return (target: object, propertyKey: string) => {
     const config: ParseDecoratorConfig<T> = {
       type: 'parse',
       propertyKey,
       fn,
     };
-    defineKeyConfig(metaKey, config, target, 'property');
+    defineKeyConfig(config, target, propertyKey);
+  };
+}
+
+export function overwrite() {
+  return (target: object, propertyKey: string) => {
+    // clear existing decorators.
+    Reflect.defineMetadata(metaDecorators, [], target, propertyKey);
   };
 }
 
@@ -116,7 +149,7 @@ export function parseHandler<T>(
   return config.fn(value);
 }
 
-export function nestedHandler<T>(
+export function nestedHandler(
   value: object,
   designType: DesignType,
   config: EnvDecoratorConfig,
@@ -132,7 +165,16 @@ export function nestedHandler<T>(
   return factory.create((designType as ClassObject<Settings>));
 }
 
-const ClassValues = Symbol(`class setting values`);
+function overwriteHandler(
+  value: object,
+  designType: DesignType,
+  config: EnvDecoratorConfig,
+  factory: SettingFactory,
+) {
+  // Indicate that the handler value should not be used. The default value will
+  // be used instead or one from another handler.
+  return undefined;
+}
 
 export type CreateResult<T> = {
   errors: ValidationError[] | null;
@@ -154,13 +196,13 @@ export class SettingFactory {
     env: environmentHandler,
     parse: parseHandler,
     nested: nestedHandler,
+    overwrite: overwriteHandler,
   };
 
   public create<T extends Settings>(
-    klass: ClassObject<T>,
-    defaults: SuppliedDefaults = {},
+    classObject: ClassObject<T>,
   ): T {
-    const { errors, result } = this.query(klass, defaults);
+    const { errors, result } = this.query(classObject);
     if (errors) {
       throw ValidationError.join(errors);
     }
@@ -168,44 +210,45 @@ export class SettingFactory {
   }
 
   public query<T extends Settings>(
-    klass: ClassObject<T>,
-    defaults: SuppliedDefaults = {},
+    classObject: ClassObject<T>,
   ): CreateResult<T> {
-    const keys = Reflect.getMetadata(metaMetaKey, klass.prototype) || [];
-    const classMeta = keys.reduce((
+    const keysUncast = Reflect.getMetadata(metaClassDecorators, classObject.prototype) || [];
+    const keys = (keysUncast as Set<string>);
+    const classMeta = Array.from(keys).reduce((
       sum: {
         values: AnySettings,
         designTypes: DesignTypes,
       },
-      key: string | symbol,
+      propertyKey: string,
     ) => {
-      const meta = Reflect.getMetadata(key, klass.prototype, 'property');
-      const { propertyKey } = meta;
-      const designType = Reflect.getMetadata('design:type', klass.prototype, propertyKey);
-      sum.designTypes[propertyKey] = designType;
+      const ownHandlers = Reflect.getOwnMetadata(metaClassDecorators, classObject.prototype, propertyKey);
+      const protoHandlers = Reflect.getMetadata(metaDecorators, classObject.prototype, propertyKey);
+      const usedHandlers = ownHandlers || protoHandlers;
 
-      const handler = this.handlers[meta.type];
-
-      if (!handler) {
-        const err =  new Error(`unexpected handler type : ${meta.type}`);
-        throw err;
+      if (!usedHandlers) {
+        return sum;
       }
-      const value = handler(sum.values[propertyKey], designType, meta, this);
+
+      const designType = Reflect.getMetadata('design:type', classObject.prototype, propertyKey);
+      sum.designTypes[propertyKey] = designType;
+      const value = this.resolveValue(designType, usedHandlers);
+      // console.log({ propertyKey, value });
       if (value === undefined) {
         return sum;
       }
       sum.values[propertyKey] = value;
       return sum;
     }, {
-      values: { ...defaults },
+      values: {},
       designTypes: {},
     });
 
-    const validate = klass.$validate(classMeta.values, classMeta.designTypes);
+    const validate = classObject.$validate(classMeta.values, classMeta.designTypes);
     if (validate.success) {
+      const instance = this.buildInstance(classObject, classMeta.values);
       return {
         errors: null,
-        result: new klass(classMeta.values),
+        result: instance,
       };
     }
 
@@ -213,6 +256,58 @@ export class SettingFactory {
       errors: validate.errors,
       result: null,
     };
+  }
+
+  protected buildInstance(
+    classObject: ClassObject<any>,
+    values: AnySettings,
+  ): any {
+
+    // function Subclass ()
+
+    class Subclass extends classObject {
+      constructor() {
+        super();
+        for (const key in values) {
+          const value = values[key];
+          Object.defineProperty(this, key, {
+            enumerable: true,
+            configurable: true,
+            value,
+          });
+        }
+      }
+    }
+
+    // Ensure we include the original name but we are subclassed
+    Object.defineProperty(Subclass, 'name', {
+      value: `(subclass) ${classObject.name}`,
+    });
+    const instance = new Subclass();
+    instance.onBuild();
+    return instance;
+  }
+
+  protected resolveValue(
+    designType: DesignType,
+    decorators: DecoratorTypes[],
+  ): object | undefined {
+    // console.log(decorators, '<<< got decorators');
+    return decorators.reduce((
+      sum: object | undefined,
+      config: DecoratorTypes,
+    ): object | undefined => {
+      const handler = this.handlers[config.type];
+      if (!handler) {
+        const err =  new Error(`unexpected handler type : ${config.type}`);
+        throw err;
+      }
+      const value = handler(sum, designType, config, this);
+      if (value === undefined) {
+        return sum;
+      }
+      return value;
+    }, undefined);
   }
 }
 
@@ -285,7 +380,7 @@ export class Settings {
     };
   }
 
-  constructor(values: AnySettings = {}) {
-    Object.assign(this, values);
+  protected onBuild() {
+    // here for subclasses.
   }
 }

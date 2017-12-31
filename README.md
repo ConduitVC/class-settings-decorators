@@ -5,15 +5,17 @@ NOTE: Typescript is the only supported language at this time.
 This module allows classes to declare where they should pull their
 starting values from.
 
-This module is intended to be used as a "configuration" tool. Today it can pull data from enviornment variables.
+This module is intended to be used as a "configuration" tool. Today it can pull data from environment variables.
 
 ## Example
 
 ```ts
+import assert from 'assert';
 import {
   env,
   parse,
   nested,
+  overwrite,
   SettingFactory,
   Settings,
 } from 'class-setting-decorators'
@@ -52,6 +54,19 @@ class TestClass extends Settings {
   public communications: NestedConfig;
 }
 
+class Overwrite extends TestClass {
+  @overwrite()
+  public bar: string = 'test';
+}
+
+process.env.BAR = 'here';
+
 const factory = new SettingFactory();
-const { result, errors } = factory.create(TestClass);
+const test = factory.create(TestClass);
+const overwrite = factory.create(TestClass);
+
+assert(test.result.bar === 'here');
+
+// Decorators are cleared in the subclass. Useful for testing.
+assert(overwrite.result.bar === 'test');
 ```
