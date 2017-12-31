@@ -3,3 +3,4 @@ __test__
 tsconfig.json
 tslint.json
 tslint.jest.js
+coverage
