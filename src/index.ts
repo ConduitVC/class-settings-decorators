@@ -232,7 +232,6 @@ export class SettingFactory {
       const designType = Reflect.getMetadata('design:type', classObject.prototype, propertyKey);
       sum.designTypes[propertyKey] = designType;
       const value = this.resolveValue(designType, usedHandlers);
-      // console.log({ propertyKey, value });
       if (value === undefined) {
         return sum;
       }
@@ -262,9 +261,6 @@ export class SettingFactory {
     classObject: ClassObject<any>,
     values: AnySettings,
   ): any {
-
-    // function Subclass ()
-
     class Subclass extends classObject {
       constructor() {
         super();
@@ -292,7 +288,6 @@ export class SettingFactory {
     designType: DesignType,
     decorators: DecoratorTypes[],
   ): object | undefined {
-    // console.log(decorators, '<<< got decorators');
     return decorators.reduce((
       sum: object | undefined,
       config: DecoratorTypes,
