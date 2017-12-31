@@ -70,3 +70,7 @@ assert(test.result.bar === 'here');
 // Decorators are cleared in the subclass. Useful for testing.
 assert(overwrite.result.bar === 'test');
 ```
+
+### Note on subclassings
+
+Values will _not_ be fully resolved in `constructor` . Getters are the preferred way to use this module but if you really need constructor like logic add a `onBuild` method which will have all values fully resolved.
